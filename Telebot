@@ -1,0 +1,67 @@
+import telebot
+import requests
+import json
+
+
+TOKEN = '5308378781:AAF6qcnU2iCmgi0Q5043DdzCeO_EFGLYbWc'
+bot = telebot.TeleBot(TOKEN)
+keys = {
+    'биткоин': 'BTC',
+    'эфириум': 'ETH',
+    'доллар': 'USD',
+    'евро': 'EUR',
+    'юань': 'CNY',
+    'рубль': 'RUB',
+    'гривна': 'UAH',
+}
+
+class ConvertionException(Exception):
+    pass
+
+class CryptoConverter:
+    @staticmethod
+    def convert(quote: str, base: str, amount: str):
+        if quote == base:
+            raise ConvertionException('Ошибка ввода')
+        try:
+            quote_ticker = keys[quote]
+        except KeyError:
+            raise ConvertionException(f'Ошибка ввода {quote}')
+        try:
+            base_ticker = keys[base]
+        except KeyError:
+            raise ConvertionException(f'Ошибка ввода {base}')
+        try:
+            amount = float(amount)
+        except ValueError:
+            raise ConvertionException(f'Ошибка ввода {amount}')
+
+        r = requests.get(f'https://min-api.cryptocompare.com/data/price?fsym={quote_ticker}&tsyms={base_ticker}')
+        total_base = json.loads(r.content)[keys[base]] * amount
+        return total_base
+
+@bot.message_handler(commands=['start','help'])
+def handl_start_help(message):
+    text = 'Формат ввода:<название валюты><валюта,в которую перевести><количество>\nДоступные валюты:'
+    for key in keys.keys():
+        text = '\n'.join((text,key,))
+
+    bot.send_message(message.chat.id,text)
+
+@bot.message_handler(content_types=['text',])
+def convert(message: telebot.types.Message):
+    try:
+        values = message.text.split(' ')
+        if len(values)!= 3:
+            raise ConvertionException('Ошибка ввода')
+        quote,base,amount = values
+        total_base = CryptoConverter.convert(quote,base,amount)
+    except ConvertionException as e:
+        bot.reply_to(message,f'{e}')
+    except Exception as e:
+        bot.reply_to(message,f'Неудача обработки команды\n{e}')
+    else:
+        text = total_base
+        bot.reply_to(message,text)
+
+bot.polling()
